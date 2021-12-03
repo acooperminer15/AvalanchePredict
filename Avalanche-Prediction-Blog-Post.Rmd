@@ -1,0 +1,483 @@
+---
+title: "Big Data Approach to Avalanche Activity Prediction"
+date: '`r format(Sys.time(), "%B, %Y")`'
+author: Andrew Cooper, Regis University, MS Data Science
+output: 
+  flexdashboard::flex_dashboard:
+    theme: bootstrap
+    orientation: rows
+    vertical_layout: scroll
+---
+
+Analysis {data-navmenu="Intro"}
+===================================== 
+
+### Project Introduction
+
+**Background** 
+
+Avalanche activity has become a dangerous natural phenomenon that has consistently occurred throughout the Rocky Mountain region of the United States and has drastically many mountain region’s general way of life. Looking some high-level avalanche statistics below, we can see there is a pattern of avalanches becoming more frequent over the last decade and most avalanche activity occurring in Colorado, specifically at Berthoud Pass Summit. Being able to predict when avalanches are likely to occur has consistently been a stimulating problem that has historically been approach through various physics-based theoretical models, which try to model when snow begins to slide based on factors like slope, precipitation, etc. Over the past few years, organizations like the Colorado Avalanche Information Center (CAIC) and other private environmental data companies have been collecting various types of temperature, weather, and snow measurements across a wide range of summit locations that tend to have high avalanche activity throughout the spring and winter seasons. For this data science project I have collaborated with CAIC along with an organization known as Snowflo to build out a machine learning workflow to help predict whether an avalanche will occur at Berthoud Pass Summit at a rate of higher than 60%, which tends to be the accuracy of physics-based models. This workflow will combine & merge different datasets based on the time series date to have a better understanding of summit conditions, through the analysis of factors like new snow, water saturation, elevation, slope, wind, etc. Ideally, I will be looking for some public physics-based forecasts (maybe through NOAA or CAIC) to see how a machine learning or big data approach compares against the more modern approaches. 
+
+**Workflow Steps**
+
+For this project I will be focused on the following workflow steps:
+
+1) Obtain Data - this section will be focused on grabbing different types of datasets associated with Berthoud Pass Summit and merging them together based on the Date identification key. 
+
+2) Process Data - here we will take the necessary steps to clean up any of the variables and prepare the database to be explored further.
+
+3) Exploratory Data Analysis - after the data has been brought in and processed accordingly we will then start to build an exploratory data analysis report where we can analyze metrics like missing data, numeric distributions, outlier issues, etc.
+
+4) Feature Engineering - while this is one of the more overlooked stages of the data science workflow, we will take some time to research if there are any new variables we can generate that will be valuable in predicting whether an avalanche is likely to occur or not.
+
+5) Model Building - after the data has been prepped and split into a test & train subset, I will utilize a normal algorithm testing phase with logistical regression, Naive-Bayes, and a decision tree. To go beyond Data Practicum I, I will load in the commercial package of H2O which helps companies automate machine learning and specifically stacked model building in the most efficient manner. 
+
+6) Analysis | Insights - we will wrap up the project by comparing standard R package algorithms against H2O's commercial algorithm prediction analysis and look at metrics like RMSE, AUC, Classification Matrices, etc.
+
+Analysis {data-navmenu="Obtain-Data"}
+=====================================
+
+Now that we have a general idea of what we are trying to predict, let's take a look at the first step of any data science problem which is obtaining data. Before we take a look at any data, let's bring in the necessary R packages and functions that will be useful throughout the workflow:
+
+```{r chunk1, echo = TRUE}
+
+# LOAD NEEEDED PACKAGES, FUNCTIONS, COLOR SCHEMES ============================================================================
+
+library("h2o")
+library("caret")
+library("naivebayes")
+library("dplyr")
+library("ggplot2")
+library("psych")
+library("pscl")
+library("leaflet.extras")
+library("magrittr")
+library("plumber")
+library("geosphere")
+library("NISTunits")
+library("class")
+library("fields")
+library("randomcoloR")
+library("svMisc")
+library("timeDate")
+library("RODBC")
+library("dplyr")
+library("ggplot2")
+library("class")
+library("tidyr")
+library("aRpsDCA")
+library("ggExtra")
+library("gridExtra")
+library("RODBCext")
+library("MASS")
+library("ggpubr")
+library("grid")
+library("caret")
+library("fitdistrplus")
+library("tseries")
+library("forecast")
+library("mgcv")
+library("zoo")
+library("xlsx")
+library("EnvStats")
+library("maptools")  
+library("viridis")
+library("leaflet")
+library("aRpsDCA")
+library("nnet")
+library("RSNNS")
+library("svMisc")
+library("timeDate")
+library("RODBC")
+library("dplyr")
+library("ggplot2")
+library("class")
+library("ggmap")
+library("tidyr")
+library("aRpsDCA")
+library("ggExtra")
+library("gridExtra")
+library("RODBCext")
+library("MASS")
+library("ggpubr")
+library("grid")
+library("fitdistrplus")
+library("tseries")
+library("forecast")
+library("mgcv")
+library("lubridate")
+library("Hmisc")
+library("zoo")
+library("xlsx")
+library("EnvStats")
+library("maptools")  
+library("viridis")
+library("leaflet")
+library("jsonlite")
+library("stringr")
+library("RODBC")
+library("dplyr")
+library("ggplot2")
+library("class")
+library("ggmap")
+library("tidyr")
+library("aRpsDCA")
+library("ggExtra")
+library("gridExtra")
+library("RODBCext")
+library("MASS")
+library("ggpubr")
+library("grid")
+library("plyr")
+library("plotly")
+library("RColorBrewer")
+library("rpart")
+library("rattle")
+library("rpart.plot")
+library("xlsx")
+library("flexdashboard")
+library("DT")
+library("colorRamps")
+library("readxl")
+library("astsa")
+library("shiny")
+library("DataExplorer")
+library("class")
+library("e1071")
+library("dummies")
+library("randomForest")
+library("xgboost")
+
+set.seed(1234)
+COLOR <- distinctColorPalette(12)
+
+write.excel <- function(x,row.names=FALSE,col.names=TRUE,...) {
+  write.table(x,"clipboard",sep="\t",row.names=row.names,col.names=col.names,...)
+}
+
+```
+
+Great, now we have some R packages and a few functions and color palettes that will help with our visualization efforts! Now that we can call on a variety of different functions, let's start by bringing in data provided by the CAIC that looks at Berthoud Pass daily avalanche activity. 
+
+```{r chunk2, echo = TRUE}
+
+# LOAD AVALANCHE ACTIVITY DATA ============================================================================
+
+Avalanche_Activity_Data <- read_excel("C:/Users/andrew_cooper/OneDrive - S&P Global/Desktop/Regis-Coursework/Data-Practicum-II/Avalanche-Activity-Data.xlsx")
+
+Avalanche_Activity_Data$Date <- as.Date(Avalanche_Activity_Data$Date)
+
+head(Avalanche_Activity_Data)
+describe(Avalanche_Activity_Data)
+
+```
+
+So looking at his first dataset, we see the historical avalanche record of Berthoud Pass going back to April 2011 through May 2020, so around a decade of avalanche activity data! We load this data into our R workflow and make sure the date specified is a "Date" data structure type, while it looks like the factor of avalanche occurrence "yes" is noted as 1, while a "no" is noted as 0. With this definition it appears that 28% of the data is listed as "yes" with some sort of avalanche activity, while 72% of days have not activity occurrence. This will be useful to note moving into the prediction phase of this workflow.
+
+This initial dataset will be the target variable to predict (yes 1, vs no 0), however we need more detailed information about Berthoud Pass to begin building our machine learning model to predict avalanche activity on a consistent basis. The second dataset which is also provided by the CAIC is weather data, which is a simple measurement of daily low and high recorded temperatures at the summit.
+
+```{r chunk3, echo = TRUE}
+
+# LOAD WEATHER DATA ============================================================================
+
+Weather_Data <- read_excel("C:/Users/andrew_cooper/OneDrive - S&P Global/Desktop/Regis-Coursework/Data-Practicum-II/Weather-Temperature-Data.xlsx")
+
+Weather_Data$Date <- as.Date(Weather_Data$Date)
+Weather_Data$`High Temperature` <- as.numeric(Weather_Data$`High Temperature`)
+Weather_Data$`Low Temperature` <- as.numeric(Weather_Data$`Low Temperature`)
+
+head(Weather_Data)
+describe(Weather_Data)
+
+```
+
+Again, a simple dataset provided by the CAIC, however we can tell the date range matches that of the avalanche activity data and both the high and low daily temperatures appear to have reasonable ranges, with average highs and lows coming in at 29.3 and 8.195 degrees! At this point there isn't enough external data to move forward with a prediction workflow, however this weather data frame appears prepped for analysis.
+
+Moving onto our third dataset, we are going to have to start looking outside the CAIC for information describing Berthoud Pass, so here we will start to use the third party company known as Snoflo, which collects detailed information about daily conditions and exports data that is heavily descriptive on the physical nature of the snow. Let's bring in this snowfall dataset and see what variables are available to make our machine learning workflow more effective:
+
+```{r chunk4, echo = TRUE}
+
+# LOAD SNOWFALL DATA ============================================================================
+
+Snowfall_Data <- read_excel("C:/Users/andrew_cooper/OneDrive - S&P Global/Desktop/Regis-Coursework/Data-Practicum-II/Snowfall-Data.xlsx")
+
+Snowfall_Data$Date <- as.Date(Snowfall_Data$Date)
+Snowfall_Data$`Snow Depth` <- as.numeric(Snowfall_Data$`Snow Depth`)
+Snowfall_Data$`New Snow` <- as.numeric(Snowfall_Data$`New Snow`)
+Snowfall_Data$SWE <- as.numeric(Snowfall_Data$SWE)
+Snowfall_Data$`Snow Settlement` <- as.numeric(Snowfall_Data$`Snow Settlement`)
+
+head(Snowfall_Data)
+describe(Snowfall_Data)
+
+####################################################################################################
+```
+
+This dataset looks promising, as the date range was exported to match the CAIC avalanche records helping with the data processing stage. Looking at these snow measurements, we have "SWE" which can be defined as snow water equivalence, or the percent percent of water density that makes up the entire snow pack. This will help define some of the relationships between avalanches and the slippage of the melting snow pack, so likely this will be an important observation. Next, we see snow depth which is the daily measurement of the snow pile in inches and finally the new snow data which is the daily addition of new snow seen in inches as well. So we have three interesting variables defining what is happening from a snow standpoint and hopefully they will help with the separation of avalanche days versus non-avalanche days.
+
+Let's load in the last dataset also provided by Snoflo, which looks to characterize the wind patterns seen at the summit on a daily basis. Wind factors like speed and direction in physics-based models tend to have the most significance in tracking avalanches, so having this information for a big data based approach will be critical.
+
+```{r chunk5, echo = TRUE}
+
+# LOAD WIND OBSERVATION DATA
+
+Wind_Observational_Data <- read_excel("C:/Users/andrew_cooper/OneDrive - S&P Global/Desktop/Regis-Coursework/Data-Practicum-II/Wind-Observational-Data.xlsx")
+
+Wind_Observational_Data$Date <- as.Date(Wind_Observational_Data$Date)
+Wind_Observational_Data$`Wind Direction` <- as.numeric(Wind_Observational_Data$`Wind Direction`)
+Wind_Observational_Data$`Wind Speed` <- as.numeric(Wind_Observational_Data$`Wind Speed`)
+
+head(Wind_Observational_Data)
+describe(Wind_Observational_Data)
+
+```
+
+Looking at this final dataset, we see a wind speed range in miles per hour and also a wind direction that is degrees from north, both of which should work together to help guide avalanche activity down the Berthoud Pass slope. Now that we have all four independent datasets brought in for analysis, we need to merge them into a final dataframe for which we can start to do exploratory data analysis and feature engineering. This will be done in the next major data science workflow stage known as "Process Data".
+
+Analysis {data-navmenu="Process-Data"}
+=====================================
+
+### Background 
+
+Before we move into exploratory data analysis (EDA), let's merge and do any last minute prep to make sure this dataframe will be ready for test | train split and eventual model building:
+
+```{r chunk6, echo = TRUE}
+
+# MERGE & PREP FINAL DATAFRAME ##############################################################################
+
+FINAL_DATA_AV <- left_join(Avalanche_Activity_Data, Snowfall_Data, by = "Date")
+FINAL_DATA_AV <- left_join(FINAL_DATA_AV, Weather_Data, by = "Date")
+FINAL_DATA_AV <- left_join(FINAL_DATA_AV, Wind_Observational_Data, by = "Date")
+colnames(FINAL_DATA_AV) <- c('Date','AvOccur','SnowDepth','NewSnow','WaterEq','SnowSettle','HighTemp','LowTemp','WindDirection','WindSpeed')
+
+str(FINAL_DATA_AV)
+
+```
+
+Starting from our initial avalanche activity CAIC dataset, we were able to add 8 additional measured data points that will help us better understand the interaction between avalanche activity and outside temperature, wind patterns, and physical snow composition. This will be the dataframe that we begin to analyze in define in the EDA stage of our workflow, and also we will look at adding some extra variables through feature engineering to help separate a "yes" versus "no" AvOccur target variable in our prediction section.
+
+Analysis {data-navmenu="Explore-Data"}
+=====================================
+
+### Background 
+
+While most of our EDA can be viewed in the independent .html file linked in this GitHub blog, we can showcase how Data Scientists can create standardized EDA reports through the use of a few interesting functions. Below we will define our EDA report and build this report based on our FINAL_DATA_AV dataframe:
+
+```{r chunk7, echo = TRUE}
+
+# EXPLORATORY ANALYSIS ##############################################################################
+
+function (add_introduce = TRUE, add_plot_intro = TRUE, add_plot_str = TRUE, 
+          add_plot_missing = TRUE, add_plot_histogram = TRUE, add_plot_density = FALSE, 
+          add_plot_qq = TRUE, add_plot_bar = TRUE, add_plot_correlation = TRUE, 
+          add_plot_prcomp = TRUE, add_plot_boxplot = TRUE, add_plot_scatterplot = TRUE, 
+          introduce_args = list(), plot_intro_args = list(), plot_str_args = list(type = "diagonal", 
+                                                                                  fontSize = 35, width = 1000, margin = list(left = 350, 
+                                                                                                                             right = 250)), plot_missing_args = list(), plot_histogram_args = list(), 
+          plot_density_args = list(), plot_qq_args = list(sampled_rows = 1000L), 
+          plot_bar_args = list(), plot_correlation_args = list(cor_args = list(use = "pairwise.complete.obs")), 
+          plot_prcomp_args = list(), plot_boxplot_args = list(), plot_scatterplot_args = list(sampled_rows = 1000L), 
+          global_ggtheme = quote(theme_gray()), global_theme_config = list()) 
+{
+  input_args <- as.list(match.call())
+  self_name <- input_args[[1]]
+  formal_args <- formals(match.fun(self_name))
+  switches <- grep("add_", names(formal_args), value = TRUE, 
+                   fixed = TRUE)
+  global_settings <- grep("global_", names(formal_args), value = TRUE, 
+                          fixed = TRUE)
+  global_exceptions <- c("add_introduce", "add_plot_str")
+  config <- lapply(setNames(switches, switches), function(s) {
+    if ((!is.null(input_args[[s]]) && eval(input_args[[s]])) || 
+        (is.null(input_args[[s]]) && formal_args[[s]])) {
+      key_args <- paste0(gsub("add_", "", s, fixed = TRUE), 
+                         "_args")
+      input_values <- eval(input_args[[key_args]])
+      formal_values <- eval(formal_args[[key_args]])
+      value <- NULL
+      if (!(s %in% global_exceptions)) {
+        if ("ggtheme" %in% names(input_values)) {
+          value <- list(ggtheme = input_values[["ggtheme"]])
+          input_values[["ggtheme"]] <- NULL
+        }
+        else {
+          value <- list(ggtheme = global_ggtheme)
+        }
+        if ("theme_config" %in% names(input_values)) {
+          value <- c(value, list(theme_config = input_values[["theme_config"]]))
+          input_values[["theme_config"]] <- NULL
+        }
+        else {
+          value <- c(value, list(theme_config = global_theme_config))
+        }
+      }
+      if (!is.null(input_values)) {
+        value <- c(value, input_values)
+      }
+      else {
+        value <- c(value, formal_values)
+      }
+    }
+  })
+  names(config) <- gsub("add_", "", names(config), fixed = TRUE)
+  Filter(Negate(is.null), config)
+}
+
+function (data, output_format = html_document(toc = TRUE, toc_depth = 6, 
+                                              theme = "yeti"), output_file = "report.html", output_dir = getwd(), 
+          y = NULL, config = configure_report(), report_title = "Data Profiling Report", 
+          ...) 
+{
+  if (!is.data.table(data)) 
+    data <- data.table(data)
+  if (!is.null(y)) {
+    if (!(y %in% names(data))) 
+      stop("`", y, "` not found in data!")
+  }
+  report_dir <- system.file("rmd_template/report.rmd", package = "DataExplorer")
+  suppressWarnings(render(input = report_dir, output_format = output_format, 
+                          output_file = output_file, output_dir = output_dir, 
+                          intermediates_dir = output_dir, params = list(data = data, 
+                                                                        report_config = config, response = y, set_title = report_title), 
+                          ...))
+  report_path <- path.expand(file.path(output_dir, output_file))
+  browseURL(report_path)
+}
+
+setwd('C:/Users/andrew_cooper/OneDrive - S&P Global/Desktop/Regis-Coursework/Data-Practicum-II/')
+#create_report(FINAL_DATA_AV, output_file = 'AvalancheData-EDA.html')
+
+```
+
+Great! So in this function "create_report" we can see the EDA-Report.html file and follow some of the EDA analysis. Some of the key takeaways are as follows (please open up the EDA-Report.html file to follow along):
+
+1) So again, basic statistics and overall analysis on total observations which is the product of the rows and columns of the final dataframe. Looks like the key point here is we have around 3,295 days of observations for which we will look to build our model.
+2) Next, we can take a look at the current state of the data structure, as we have our 10 variables with 3,295 observations. Data structure types include: date & integer.
+3) Here we can see that we have no missing data, which helps with overall data trust & quality, and no analysis or imputation techniques will be needed.
+4) Each data is distributed in a unique fashion, as temperature recordings and wind speeds appear to be Gaussian in nature, while snow settlement, new snow, and SWE appear to be distributed in a more log-normal sense. 
+5) Some potential outliers exist in some of the snow observation data, however we will have to do some tests to make sure.
+6) Looking at some of these Q-Q plots, there definitely appears to be some relationships between avalanche days and many of the observational data, as you can see the red vs blue plot separation as a key point in our next step which is model building. 
+
+Now that we've completed some basic EDA, we can move forward into the feature engineering section of the machine learning workflow where we can alter some of the variables, generate new ones, and finalize our data before we decide to move into model building.
+
+Analysis {data-navmenu="Feature-Engineering"}
+=====================================
+
+### Background 
+
+Phew, ok! Next step is one of the most important in the entire workflow, as most early career data scientists fail to try and derive new features that might improve the model accuracy and overall analysis. While creating features usually can be done with relatively simple data manipulation, sometimes having background on the subject matter provides an advantage in deciding how to generate secondary parameters. Let's calculate a few new variables and describe why these might be useful:
+
+```{r chunk8A, echo = TRUE}
+
+FINAL_DATA_AV$NewSnow72Hrs <- NA
+FINAL_DATA_AV$NewSnow1Week <- NA
+FINAL_DATA_AV$HighTempWeeklyAvg <- NA
+FINAL_DATA_AV$LowTempWeeklyAvg <- NA
+
+for(i in 4:nrow(FINAL_DATA_AV)){
+  FINAL_DATA_AV$NewSnow72Hrs[i] <- FINAL_DATA_AV$NewSnow[i-3] + FINAL_DATA_AV$NewSnow[i-2] + FINAL_DATA_AV$NewSnow[i-1]
+}
+
+for(i in 8:nrow(FINAL_DATA_AV)){
+  FINAL_DATA_AV$NewSnow1Week[i] <- FINAL_DATA_AV$NewSnow[i-7] + FINAL_DATA_AV$NewSnow[i-6] + FINAL_DATA_AV$NewSnow[i-5] + 
+    FINAL_DATA_AV$NewSnow[i-4] + FINAL_DATA_AV$NewSnow[i-3] + FINAL_DATA_AV$NewSnow[i-2] + FINAL_DATA_AV$NewSnow[i-1]
+}
+
+for(i in 8:nrow(FINAL_DATA_AV)){
+  FINAL_DATA_AV$HighTempWeeklyAvg[i] <- ((FINAL_DATA_AV$HighTemp[i-7] + FINAL_DATA_AV$HighTemp[i-6] + FINAL_DATA_AV$HighTemp[i-5] + 
+    FINAL_DATA_AV$HighTemp[i-4] + FINAL_DATA_AV$HighTemp[i-3] + FINAL_DATA_AV$HighTemp[i-2] + FINAL_DATA_AV$HighTemp[i-1])/7)
+}
+
+for(i in 8:nrow(FINAL_DATA_AV)){
+  FINAL_DATA_AV$LowTempWeeklyAvg[i] <- ((FINAL_DATA_AV$LowTemp[i-7] + FINAL_DATA_AV$LowTemp[i-6] + FINAL_DATA_AV$LowTemp[i-5] + 
+    FINAL_DATA_AV$LowTemp[i-4] + FINAL_DATA_AV$LowTemp[i-3] + FINAL_DATA_AV$LowTemp[i-2] + FINAL_DATA_AV$LowTemp[i-1])/7)
+}
+
+```
+
+Here are four new potential variables that could help with the daily separation of days with versus without avalanche activity. The first feature is a three day or 72 hour new snow sum that tracks how much new snow is happening over a long span of time, versus a simple single day measurement. The next feature is not a three day, but an entire week of new snow summed to see how periods of high new snow activity contribute to avalanches occurring. The final two features are going to be weekly temperature averages for both daily low and high temperature measurements. This might give a better sense of when melting is occurring on a less granular time frame. Again, these are features created through the combination of available variables, so they aren't necessarily going to be critical variables when predicting whether an avalanche will happen. Now that we have these finalized, let's move onto Modeling.
+
+Analysis {data-navmenu="Modeling"}
+=====================================
+
+### Background 
+
+Now that we have our final dataframe that can be used as a main input into the model building workflow step let's take a look at training different model types based on the prediction of the AvOccur variable being 1 versus 0. Let's remove any missing data points (introduced during feature engineering time series data generation) and also define factors and remove dates from our prepped dataframe. After this step we can split the data into a test | train subset using a 70/30 rule and begin modeling. For the first model approach, we will take a look at classic R models used for classification problems, specifically the logistical regression, CART decision tree, and a Naive Bayes classifier Below is the code for these procedures:
+
+```{r chunk9, echo = TRUE}
+
+FINAL_DATA_AV <- FINAL_DATA_AV[!(rowSums(is.na(FINAL_DATA_AV))),]
+FINAL_DATA_AV <- FINAL_DATA_AV[,-1]
+FINAL_DATA_AV$AvOccur <- as.factor(FINAL_DATA_AV$AvOccur)
+
+# ORIGINAL MODEL BUILD WORKFLOW
+  
+dt = sort(sample(nrow(FINAL_DATA_AV), nrow(FINAL_DATA_AV)*.7))
+TRAIN <- FINAL_DATA_AV[dt,]
+TEST <- FINAL_DATA_AV[-dt,]
+
+MODEL_1 <- glm(AvOccur ~ ., data = TRAIN, family = "binomial")
+MODEL_2 <- rpart(AvOccur ~ ., data = TRAIN, method = "class")
+MODEL_3 <- naive_bayes(AvOccur ~ ., data = TRAIN, usekernel = T) 
+
+summary(MODEL_1)
+summary(MODEL_2)
+summary(MODEL_3)  
+  
+```
+
+Now that we've seen some standard machine learning models being run in R, we can try to implement a more commercial approach through the H2O package. This is a product and platform that allows Data Scientists to build a wide variety of more complex stacked models to see what the best potential algorithm would be with respect to a classification matrix or other accuracy measurements like RMSE, AUC, etc. Below we can initialize the H2O package and run the automl function to run a wide variety of solutions to this avalanche forecast problem:
+
+```{r chunk10, echo = TRUE}
+
+h2o.init(max_mem_size = "20G")
+
+TRAIN_H2O <- as.h2o(TRAIN)
+TEST_H2O <- as.h2o(TEST)
+
+# MODEL TESTING ======================================================================================
+
+PREDICTORS <- c('SnowDepth','NewSnow','WaterEq','SnowSettle','HighTemp','LowTemp','WindDirection','WindSpeed',
+                'NewSnow72Hrs','NewSnow1Week','HighTempWeeklyAvg','LowTempWeeklyAvg')
+RESPONSE <- c('AvOccur')
+
+AUTO_ML_MODEL_BUILD <- h2o.automl(x = PREDICTORS, y = RESPONSE, training_frame = TRAIN_H2O, max_runtime_secs = 100)
+summary(AUTO_ML_MODEL_BUILD)
+AUTO_ML_MODEL_BUILD_LB <- h2o.get_leaderboard(AUTO_ML_MODEL_BUILD)
+head(AUTO_ML_MODEL_BUILD_LB)
+  
+```
+
+We can see H2O ran successfully and tested 36 different models and the leaderboard showcases the top machine learning models based on factors like AUC, Logloss, AUCpr, RMSE, etc. It appears that StackedEnsemble_AllModels_3_AutoML_2 was the most accurate commercial model to predict whether an avalanche will occur or not.
+
+Analysis {data-navmenu="Final-Results"}
+=====================================
+
+### Background 
+
+Now that we have our standard model and H2O model let's create some final result classification matrices to see if our modeling can beat the NOAA | CAIC defined ~60% accuracy on a day-to-day forecast.
+
+```{r chunk11, echo = TRUE}
+
+p1 = predict(MODEL_1, TEST)
+p1 = as.numeric(p1)
+p1_results <- ifelse(p1 > 0.5,1,0)
+
+ACTUALS <- as.factor(TEST$AvOccur)
+MODEL_1_PREDICT <- as.factor(p1_results)
+
+RESULTS_1 <- caret::confusionMatrix(MODEL_1_PREDICT, ACTUALS)
+RESULTS_1
+
+# prediction result on test data
+prediction = h2o.predict(AUTO_ML_MODEL_BUILD@leader, TEST_H2O[,-1]) %>%
+  as.data.frame()
+
+# create a confusion matrix
+MATRIX <- caret::confusionMatrix(as.factor(TEST$AvOccur), as.factor(prediction$predict))
+# close h2o connection
+h2o.shutdown(prompt = F)
+
+```
+
+Looks like we ended up with a model predicting avalanche occurrence with an accuracy of 74%, better than the industry standard by a large margin! The most important variables appear to be SnowDepth, HighTemp, WindSpeed, and NewSnow72Hrs, which makes sense as they variables probably correlate well to melting snow days with wind speeds helping influence avalanches with the correct snow conditions of high volumes of new snow on a already large snow pack (depth). 
